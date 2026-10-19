@@ -182,7 +182,7 @@
     map.on('click', function(){ animToken++; });
     map.on('zoomend', function(){ var z = map.getZoom(); // small screens zoom out further; the least important labels go first
       document.querySelectorAll('.plabel.far').forEach(function(el){ el.classList.toggle('hide-far', z < 6); });
-      document.querySelectorAll('.plabel.far5').forEach(function(el){ el.classList.toggle('hide-far', z < 5); }); });
+      document.querySelectorAll('.plabel.far5').forEach(function(el){ el.classList.toggle('hide-far', z < 4.4); }); }); // iPad's season view sits near 4.6; the phone's near 3.8
     document.getElementById('zin').addEventListener('click', function(){ map.zoomIn(); });
     document.getElementById('zout').addEventListener('click', function(){ map.zoomOut(); });
   } else {
@@ -223,7 +223,7 @@
       var html = s.short + (s.sub ? '<small>' + s.sub + '</small>' : '');
       var z = map.getZoom();
       var cls = 'plabel' + (p.kind === 'region' || p.kind === 'coast' ? ' region' : '') + (s.farHide ? ' far' : '') + (s.far5 ? ' far5' : '')
-        + ((s.farHide && z < 6) || (s.far5 && z < 5) ? ' hide-far' : '');
+        + ((s.farHide && z < 6) || (s.far5 && z < 4.4) ? ' hide-far' : '');
       m.bindTooltip(html, { permanent: true, direction: s.dir, offset: s.off, className: cls, interactive: true, opacity: 1 });
       m.getTooltip().on('click', function(){ if (p.kind !== 'region') openPlace(id); });
     });
