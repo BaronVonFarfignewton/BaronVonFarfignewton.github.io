@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en" data-look="parchment">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Vikings map">
+<title>Vikings, Season 1: the map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<style>
+  /* ---- Looks. Every pair below was chosen to clear 7:1 (text) or 4.5:1 (chrome); measured after build. ---- */
+  html[data-look="parchment"]{
+    --bg:#f6efe0; --panel:#fffaf0; --ink:#1f1a14; --muted:#4a4036; --line:#8c8070;
+    --accent:#1d4b78; --accent-ink:#ffffff; --pin:#7a1f1f; --pin-soft:#a35a5a; --sea:#dbe6ee;
+    --btn:#efe4cc; --btn-ink:#1f1a14; --focus:#1d4b78; --tiles:light;
+  }
+  html[data-look="slate"]{
+    --bg:#ffffff; --panel:#f7f8fa; --ink:#1b1f24; --muted:#3d4650; --line:#8a949e;
+    --accent:#1e4d7a; --accent-ink:#ffffff; --pin:#8a2d2d; --pin-soft:#b06a6a; --sea:#e3ebf2;
+    --btn:#e9edf1; --btn-ink:#1b1f24; --focus:#1e4d7a; --tiles:light;
+  }
+  @media (prefers-color-scheme: dark){
+    html[data-look="parchment"]{
+      --bg:#17130e; --panel:#211b14; --ink:#f3ead8; --muted:#d6c9b2; --line:#8a7d68;
+      --accent:#8fc1ec; --accent-ink:#0f1a26; --pin:#ff9b9b; --pin-soft:#d98c8c; --sea:#1c2a36;
+      --btn:#33291f; --btn-ink:#f3ead8; --focus:#8fc1ec; --tiles:dark;
+    }
+    html[data-look="slate"]{
+      --bg:#121417; --panel:#1a1d21; --ink:#f2f4f6; --muted:#c9d1d9; --line:#6b7580;
+      --accent:#8fc1ec; --accent-ink:#0f1a26; --pin:#ff9b9b; --pin-soft:#d98c8c; --sea:#1c2a36;
+      --btn:#262b31; --btn-ink:#f2f4f6; --focus:#8fc1ec; --tiles:dark;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--ink);
+    font:400 22px/1.6 -apple-system,system-ui,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+    display:grid;grid-template-columns:60% 40%;grid-template-rows:100%;height:100dvh;overflow:hidden}
+  #map{position:relative;background:var(--sea);min-height:0}
+  #panel{background:var(--panel);border-left:2px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  @media (max-width: 900px), (orientation: portrait){
+    body{grid-template-columns:100%;grid-template-rows:48% 52%}
+    #panel{border-left:0;border-top:2px solid var(--line)}
+  }
+  button{font:inherit;color:var(--btn-ink);background:var(--btn);border:2px solid var(--line);border-radius:14px;
+    min-height:56px;min-width:56px;padding:8px 18px;font-weight:600;cursor:pointer;line-height:1.3}
+  button:hover{filter:brightness(.94)}
+  button:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+  button[disabled]{opacity:.55;cursor:default}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .hdr{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:2px solid var(--line)}
+  .hdr .title{flex:1;min-width:0;line-height:1.3}
+  .hdr .title b{display:block;font-size:26px;font-weight:700}
+  .hdr .title span{display:block;font-size:22px;color:var(--muted)}
+  .arrow{font-size:30px;padding:0 16px}
+  #body{flex:1;min-height:0;overflow:auto;padding:16px;-webkit-overflow-scrolling:touch}
+  #body p{max-width:60ch;margin:0 0 14px}
+  h2{font-size:28px;line-height:1.35;margin:0 0 10px;font-weight:700}
+  h3{font-size:24px;line-height:1.35;margin:18px 0 6px;font-weight:700;color:var(--muted)}
+  .row{display:flex;align-items:center;gap:14px;width:100%;text-align:left;margin:0 0 12px;padding:12px 14px;border-radius:14px}
+  .row .mark{flex:0 0 auto;width:22px;height:22px;border-radius:50%;background:var(--pin)}
+  .row .mark.region{border-radius:4px;background:transparent;border:3px dashed var(--pin)}
+  .row .mark.coast{border-radius:4px;background:transparent;border:3px solid var(--pin)}
+  .foot{padding:12px 16px 16px;border-top:2px solid var(--line);display:flex;gap:12px;flex-direction:column}
+  .checked{font-size:20px;color:var(--muted);line-height:1.5}
+  .back{margin-bottom:14px}
+  .notice{background:var(--btn);border:2px solid var(--line);border-radius:14px;padding:12px 16px;margin:0 0 14px;max-width:60ch}
+  #mapctl{position:absolute;right:12px;top:12px;z-index:800;display:flex;gap:10px}
+  #loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--sea);z-index:700;font-weight:600}
+  #loading.hide{display:none}
+  .leaflet-container{font:inherit;background:var(--sea)}
+  .leaflet-control-attribution{font-size:16px !important;line-height:1.4;background:var(--panel) !important;color:var(--muted) !important;padding:4px 8px}
+  .leaflet-control-attribution a{color:var(--accent) !important}
+  .leaflet-control-zoom a{width:56px !important;height:56px !important;line-height:56px !important;font-size:28px !important;
+    color:var(--btn-ink) !important;background:var(--btn) !important;border-color:var(--line) !important}
+  .lbl{font-size:20px;font-weight:700;color:var(--ink);background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:4px 10px;white-space:nowrap;line-height:1.3}
+  .lbl.region{font-style:italic;font-weight:600;color:var(--muted)}
+  .leaflet-tooltip{font:inherit;padding:0;border:0;background:transparent;box-shadow:none}
+  .leaflet-tooltip::before{display:none}
+  .ship{width:30px;height:30px}
+  .ship svg{width:30px;height:30px;display:block}
+  #look{position:absolute;left:12px;bottom:12px;z-index:800;display:none;gap:10px;flex-wrap:wrap}
+  html[data-round2] #look{display:flex}
+  @media (prefers-reduced-motion: reduce){ .leaflet-zoom-anim .leaflet-zoom-animated{transition:none} }
+</style>
+</head>
+<body>
+  <div id="map" aria-label="Map of the places in Vikings, Season 1">
+    <div id="loading">Loading the map…</div>
+    <div id="mapctl">
+      <button id="replay" type="button" title="Play the voyage again">▶ Play voyage</button>
+    </div>
+    <div id="look">
+      <button type="button" data-set-look="parchment">Look 1: parchment</button>
+      <button type="button" data-set-look="slate">Look 2: slate</button>
+    </div>
+  </div>
+  <aside id="panel" aria-live="polite">
+    <div class="hdr">
+      <button id="prev" class="arrow" type="button" aria-label="Previous episode">‹</button>
+      <div class="title"><b id="ep-title">Vikings, Season 1</b><span id="ep-sub">All of Season 1</span></div>
+      <button id="next" class="arrow" type="button" aria-label="Next episode">›</button>
+    </div>
+    <div id="body"></div>
+    <div class="foot">
+      <button id="who" class="primary" type="button">Who's who at the end of Season 1</button>
+      <div class="checked" id="checked"></div>
+    </div>
+  </aside>
+
+<script id="data" type="application/json">{"show": "Vikings", "season": 1, "checked_against": "research/vikings_s1_facts_checked.md", "checked_on": "2026-10-18", "source_note": "Checked against two independent episode guides on 2026-10-18. Only sentences both guides agree on are shown.", "places": {"kattegat": {"name": "Kattegat (made-up village)", "kind": "area", "lat": 60.4, "lon": 5.3, "radius_km": 60, "label": "Kattegat: the show's home village. It is made up, somewhere on Norway's coast; the show never says exactly where.", "history": "There is a real Kattegat, but it is a sea between Denmark and Sweden, not a village.", "history_rows": ["1.P3", "1.H2"]}, "baltic": {"name": "The eastern Baltic", "kind": "region", "lat": 57.5, "lon": 20.0, "history": "", "history_rows": []}, "lindisfarne": {"name": "Lindisfarne (Holy Island)", "kind": "pin", "lat": 55.68, "lon": -1.8, "history": "The raid on Lindisfarne happened in 793. The date usually given is 8 June.", "history_rows": ["2.H1", "2.H2"]}, "northumbria": {"name": "Northumbria (King Aelle's kingdom in the show)", "kind": "region", "lat": 55.2, "lon": -1.9, "history": "Northumbria was a real English kingdom in the north-east. Lindisfarne and Bamburgh were among its royal and church centres.", "history_rows": ["3.7", "3.P1"]}, "northumbria_coast": {"name": "The Northumbrian coast (exact spot not named)", "kind": "coast", "lat": 55.35, "lon": -1.55, "history": "", "history_rows": []}, "hexham": {"name": "Hexham", "kind": "pin", "lat": 54.97, "lon": -2.1, "history": "Hexham is a real town in Northumberland. The River Tyne flows by it.", "history_rows": ["4.P1", "6.H1"]}, "uppsala": {"name": "Gamla Uppsala (Old Uppsala)", "kind": "pin", "lat": 59.9, "lon": 17.63, "history": "Gamla Uppsala is a real place in Sweden.", "history_rows": ["8.P1"]}, "gotaland": {"name": "Götaland (a region)", "kind": "region", "lat": 57.5, "lon": 14.6, "history": "Götaland is a real region in southern Sweden. Gotaland is another spelling.", "history_rows": ["9.2", "9.16"]}}, "episodes": [{"n": 1, "title": "Rites of Passage", "aired": "Sunday 3 March 2013", "recap": "The year is 793. Ragnar Lothbrok is a Viking farmer and warrior. He and his brother Rollo fight in a battle in the eastern Baltic. On the battlefield, Ragnar sees a vision of the god Odin. At home, Ragnar's wife Lagertha fights off two men who attack her. Ragnar takes their son Bjorn to the local assembly. There Bjorn goes through a ceremony that makes him a man. The local ruler, Earl Haraldson, sends his raiders east. Ragnar wants to sail west instead. He tells Rollo the voyage is possible. The Earl refuses to send his ships west. Ragnar goes to his friend Floki, a gifted boat builder. Floki builds him a new kind of ship, in secret. Rollo makes advances on Lagertha, and she turns him away. Near the end, Ragnar sees Odin again. He takes it as a sign. The new ship is tested, and it holds up.", "places": [{"id": "baltic", "in_show": "He and his brother Rollo fight in a battle in the eastern Baltic. On the battlefield, Ragnar sees a vision of the god Odin."}, {"id": "kattegat", "in_show": "At home, Ragnar's wife Lagertha fights off two men who attack her. Ragnar takes their son Bjorn to the local assembly. Floki builds him a new kind of ship, in secret."}], "journeys": [{"from": "baltic", "to": "kattegat", "who": "Ragnar and Rollo", "why": "home from the battle"}]}, {"n": 2, "title": "Wrath of the Northmen", "aired": "Sunday 10 March 2013", "recap": "Ragnar wants to sail west, to England. Earl Haraldson, the local ruler, has forbidden it. Ragnar holds a secret meeting and gathers a crew. Spies tell the Earl about it. Ragnar's wife Lagertha wants to come, but he leaves her at home to guard the children and the farm. She is angry, and the two of them fight. The Earl has the blacksmith who made Ragnar's anchor put to death. Ragnar sails without the Earl's permission. His brother Rollo and his friend Floki, the boat builder, go with him. At sea, the crew rides out a storm. They reach the English coast at Lindisfarne, a monastery where Christian monks live. The Vikings break in. They kill most of the monks. One monk, Athelstan, speaks their language and begs for his life. Rollo wants to kill him. Ragnar spares him. The Vikings sail off with treasure and a few monks as slaves.", "places": [{"id": "kattegat", "in_show": "Ragnar holds a secret meeting and gathers a crew. The Earl has the blacksmith who made Ragnar's anchor put to death. Ragnar sails without the Earl's permission."}, {"id": "lindisfarne", "in_show": "They reach the English coast at Lindisfarne, a monastery where Christian monks live. The Vikings break in. They kill most of the monks. One monk, Athelstan, speaks their language and begs for his life. Rollo wants to kill him. Ragnar spares him."}], "journeys": [{"from": "kattegat", "to": "lindisfarne", "who": "Ragnar, Rollo, Floki and the crew", "why": "the first raid west"}]}, {"n": 3, "title": "Dispossessed", "aired": "Sunday 17 March 2013", "recap": "The raiders sail home with their treasure. Earl Haraldson takes it all. He lets each man keep just one thing. Ragnar chooses the monk Athelstan, as his slave. Athelstan is taken to Ragnar's farm. Ragnar's children live there: his son Bjorn and his daughter Gyda. Ragnar and his wife Lagertha invite Athelstan into their bed, and he refuses. Ragnar asks him many questions about England, its language and its ways. The Earl has a boy killed and buried with some of the treasure. Ragnar asks to raid England again. The Earl agrees, on condition that his man Knut goes too. This time Lagertha sails with them. Athelstan stays behind to look after the children. They land in Northumbria, an English kingdom in the north-east. A sheriff and his men meet the Vikings on the shore. Rollo, Ragnar's brother, does not trust the English. A fight breaks out. The English are killed.", "places": [{"id": "kattegat", "in_show": "The raiders sail home with their treasure. Earl Haraldson takes it all. He lets each man keep just one thing. Ragnar chooses the monk Athelstan, as his slave."}, {"id": "northumbria_coast", "in_show": "They land in Northumbria, an English kingdom in the north-east. A sheriff and his men meet the Vikings on the shore. A fight breaks out. The English are killed."}], "journeys": [{"from": "lindisfarne", "to": "kattegat", "who": "the raiders", "why": "home with the treasure"}, {"from": "kattegat", "to": "northumbria_coast", "who": "Ragnar, Lagertha, Rollo, Knut and the crew", "why": "the second raid"}]}, {"n": 4, "title": "Trial", "aired": "Sunday 24 March 2013", "recap": "Ragnar's band reaches Hexham, an English town. Ragnar makes his men wait for Sunday. They strike while the people are in church. The priest is told the people will be spared if they do not resist. So there is little bloodshed. Knut, the Earl's man, attacks a village woman. Lagertha, Ragnar's wife, stops him. Knut turns on Lagertha, and she kills him. Then a large English force arrives at the beach where the Viking ships wait. The Vikings beat them and sail home. Earl Haraldson asks where Knut is. Ragnar says he killed Knut himself, to protect Lagertha. The Earl has Ragnar arrested. He offers Ragnar's brother Rollo treasure and the hand of his daughter to turn against Ragnar. At the trial, Rollo backs Ragnar's story. Ragnar is set free. While Ragnar's people celebrate, the Earl's men attack them. Some of Ragnar's people die.", "places": [{"id": "hexham", "in_show": "Ragnar's band reaches Hexham, an English town. They strike while the people are in church. Knut, the Earl's man, attacks a village woman. Lagertha, Ragnar's wife, stops him. Knut turns on Lagertha, and she kills him."}, {"id": "northumbria_coast", "in_show": "Then a large English force arrives at the beach where the Viking ships wait. The Vikings beat them and sail home."}, {"id": "kattegat", "in_show": "The Earl has Ragnar arrested. At the trial, Rollo backs Ragnar's story. Ragnar is set free. While Ragnar's people celebrate, the Earl's men attack them."}], "journeys": [{"from": "northumbria_coast", "to": "hexham", "who": "Ragnar's band", "why": "inland to the town"}, {"from": "hexham", "to": "northumbria_coast", "who": "Ragnar's band", "why": "back to the ships"}, {"from": "northumbria_coast", "to": "kattegat", "who": "the raiders", "why": "home"}]}, {"n": 5, "title": "Raid", "aired": "Sunday 31 March 2013", "recap": "Earl Haraldson sends his men to attack Ragnar's farm. Ragnar's family escapes. Ragnar fights the Earl's men alone and is shot with an arrow. He gets away on a horse and reaches his family at the river. Athelstan pulls him out of the water. The family hides at the home of Floki, the boat builder. Floki treats Ragnar's wound. Meanwhile, the Earl marries his daughter Thyri to an older, rich earl from Sweden. Thyri's mother, Siggy, the Earl's wife, is unhappy about it. The Earl also takes Floki's boat. Rollo, Ragnar's brother, comes to the wedding. He asks the Earl to trust him. Siggy warns Rollo to leave. The Earl's men seize Rollo and torture him, to learn where Ragnar is. A man named Torstein brings Ragnar the news. Ragnar wants revenge. He and the Earl agree to settle it with a fight, man to man.", "places": [{"id": "kattegat", "in_show": "Earl Haraldson sends his men to attack Ragnar's farm. Ragnar's family escapes. The family hides at the home of Floki, the boat builder. The Earl's men seize Rollo and torture him, to learn where Ragnar is."}], "journeys": []}, {"n": 6, "title": "Burial of the Dead", "aired": "Sunday 7 April 2013", "recap": "Earl Haraldson agrees to fight Ragnar, one against one. Ragnar is still weak from his wound. The fight is to the death. Ragnar wins, and the Earl dies. Siggy, the Earl's widow, kills the cruel Swedish husband of her daughter Thyri. Ragnar is made the new Earl. Rollo, Ragnar's brother, swears loyalty to him. The old Earl gets a grand funeral. A slave woman is sacrificed to go with him into death. Athelstan, the English monk, is horrified. Lagertha, Ragnar's wife, says she is expecting a child. Rollo courts Siggy. Athelstan asks Ragnar about Ragnarök, the end of the world in Norse belief. Athelstan takes a drug and has a vision of it. In spring, Ragnar and his men sail back to England, up a river. King Aelle of Northumbria hears that they are coming and prepares.", "places": [{"id": "kattegat", "in_show": "Earl Haraldson agrees to fight Ragnar, one against one. Ragnar wins, and the Earl dies. Ragnar is made the new Earl. The old Earl gets a grand funeral."}, {"id": "northumbria", "in_show": "In spring, Ragnar and his men sail back to England, up a river. King Aelle of Northumbria hears that they are coming and prepares."}], "journeys": [{"from": "kattegat", "to": "northumbria_coast", "who": "Ragnar and his men", "why": "back to England in spring"}]}, {"n": 7, "title": "A King's Ransom", "aired": "Sunday 14 April 2013", "recap": "Ragnar and his men set up a battle camp in England. King Aelle sends his brother to lead the English army against them. The Vikings attack the English camp at night. They capture the king's brother. Ragnar asks for 2,000 pounds of gold to set him free. Aelle agrees, on one condition: one of the Vikings must be baptized as a Christian. Rollo, Ragnar's brother, volunteers. Floki, the boat builder, is disgusted. Rollo says it was only a joke. The gold turns out to be a trap, and Aelle's men attack. The Vikings beat them off. Ragnar has the king's brother killed. Aelle then pays the gold, and vows revenge. At home, Lagertha, Ragnar's wife, rules in his place. Siggy, the old Earl's widow, asks to serve her. Lagertha loses the baby she was expecting.", "places": [{"id": "northumbria", "in_show": "Ragnar and his men set up a battle camp in England. The Vikings attack the English camp at night. They capture the king's brother. Ragnar asks for 2,000 pounds of gold to set him free. Aelle then pays the gold, and vows revenge."}, {"id": "kattegat", "in_show": "At home, Lagertha, Ragnar's wife, rules in his place. Siggy, the old Earl's widow, asks to serve her. Lagertha loses the baby she was expecting."}], "journeys": []}, {"n": 8, "title": "Sacrifice", "aired": "Sunday 21 April 2013", "recap": "Ragnar grieves for the son that Lagertha, his wife, lost. He takes his family and his people to the great temple at Uppsala, in Sweden. They go for a festival of the Norse gods. Athelstan, the English monk, goes with them. Animals have been brought to be sacrificed, and people will be too. King Horik of Denmark comes to the festival. Ragnar pledges his loyalty to Horik. Horik wants Ragnar's help against an earl who is troubling him. Siggy, the old Earl's widow, scolds Rollo, Ragnar's brother, for drinking and chasing women. The priests question Athelstan about his Christian faith. They ask him three times to deny it. They decide he has not truly given it up. So they judge him unfit to be sacrificed. Athelstan learns that he was brought there to be the sacrifice. A man named Leif volunteers to die in his place. The animals are sacrificed, and then Leif.", "places": [{"id": "uppsala", "in_show": "He takes his family and his people to the great temple at Uppsala, in Sweden. They go for a festival of the Norse gods. King Horik of Denmark comes to the festival. Ragnar pledges his loyalty to Horik. A man named Leif volunteers to die in his place. The animals are sacrificed, and then Leif."}], "journeys": [{"from": "kattegat", "to": "uppsala", "who": "Ragnar, his family and his people", "why": "the festival of the gods"}]}, {"n": 9, "title": "All Change", "aired": "Sunday 28 April 2013", "recap": "King Horik sends Ragnar to Götaland, in Sweden, to settle a land quarrel with Jarl Borg. A jarl is the same as an earl. Ragnar travels with a small party, including Rollo, his brother, and Bjorn, his son. On the way, Ragnar's men find a woman bathing. She is Aslaug, a princess. Ragnar sleeps with her. Bjorn is upset that his father has betrayed Lagertha, his mother. Ragnar carries terms between Borg and Horik, but Horik will not bend. The talks fail. Rollo agrees to side with Borg against Ragnar. At home, a plague sweeps the village. Many people die. Lagertha's daughter Gyda dies. So does Siggy's daughter Thyri. Lagertha goes to the seer, a blind holy man, for comfort, but he will not tell her much. At the end, Aslaug tells Ragnar she is carrying his child.", "places": [{"id": "gotaland", "in_show": "King Horik sends Ragnar to Götaland, in Sweden, to settle a land quarrel with Jarl Borg. On the way, Ragnar's men find a woman bathing. She is Aslaug, a princess. The talks fail. Rollo agrees to side with Borg against Ragnar."}, {"id": "kattegat", "in_show": "At home, a plague sweeps the village. Many people die. Lagertha's daughter Gyda dies. So does Siggy's daughter Thyri."}], "journeys": [{"from": "kattegat", "to": "gotaland", "who": "Ragnar, Rollo, Bjorn and a small party", "why": "to settle the land quarrel"}]}], "whos_who": [{"name": "Ragnar Lothbrok", "line": "A farmer and raider. Earl since episode 6. He has pledged loyalty to King Horik; his talks with Jarl Borg failed; Aslaug says she carries his child.", "rows": ["WW-Ragnar"]}, {"name": "Lagertha", "line": "Ragnar's wife, a shield-maiden. She lost a pregnancy and then her daughter Gyda; the seer told her little.", "rows": ["WW-Lagertha"]}, {"name": "Rollo", "line": "Ragnar's brother. He has sided with Jarl Borg against Ragnar.", "rows": ["WW-Rollo#1", "WW-Rollo#2"]}, {"name": "Bjorn", "line": "Son of Ragnar and Lagertha. He is with Ragnar on the Götaland trip and upset at his father's unfaithfulness.", "rows": ["WW-Bjorn"]}, {"name": "Gyda", "line": "Daughter of Ragnar and Lagertha. She died of the plague.", "rows": ["WW-Gyda"]}, {"name": "Floki", "line": "A boat builder and Ragnar's friend.", "rows": ["WW-Floki#1"]}, {"name": "Athelstan", "line": "An English monk taken at Lindisfarne, now Ragnar's slave.", "rows": ["WW-Athelstan#1"]}, {"name": "Siggy", "line": "Earl Haraldson's wife, now his widow. She entered Lagertha's service and lost her daughter Thyri.", "rows": ["WW-Siggy"]}, {"name": "Thyri", "line": "Daughter of Haraldson and Siggy. She died of the plague.", "rows": ["WW-Thyri"]}, {"name": "King Horik", "line": "King of Denmark. Ragnar pledged to him; he would not bend in the talks.", "rows": ["WW-Horik"]}, {"name": "Jarl Borg", "line": "An earl in Götaland, in a land quarrel with Horik. Rollo now backs him.", "rows": ["WW-Borg#1"]}, {"name": "Aslaug", "line": "A princess. She tells Ragnar she is carrying his child.", "rows": ["WW-Aslaug"]}, {"name": "King Aelle", "line": "King of Northumbria in the show. He paid the ransom and vowed revenge.", "rows": ["WW-Aelle"]}, {"name": "Earl Haraldson", "line": "The local ruler at the start. Ragnar killed him in single combat in episode 6.", "rows": ["WW-Dead#1", "6.2"]}]}</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(function(){
+  'use strict';
+  var D = JSON.parse(document.getElementById('data').textContent);
+  var EPS = D.episodes, PL = D.places;
+  var state = { ep: 0, view: 'episode', place: null }; // ep 0 = all of Season 1
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (location.search.indexOf('round2') >= 0) document.documentElement.setAttribute('data-round2','');
+  try { var savedLook = localStorage.getItem('look'); if (savedLook) document.documentElement.setAttribute('data-look', savedLook); } catch(e){}
+  document.querySelectorAll('[data-set-look]').forEach(function(b){
+    b.addEventListener('click', function(){ document.documentElement.setAttribute('data-look', b.getAttribute('data-set-look'));
+      try{ localStorage.setItem('look', b.getAttribute('data-set-look')); }catch(e){} setTiles(); });
+  });
+
+  // ---------- Map ----------
+  var mapOk = !!window.L;
+  var map, tiles, layer, shipMarker, animToken = 0;
+  var loading = document.getElementById('loading');
+  function tileUrl(){
+    var dark = getComputedStyle(document.documentElement).getPropertyValue('--tiles').trim() === 'dark';
+    return 'https://{s}.basemaps.cartocdn.com/' + (dark ? 'dark_nolabels' : 'light_nolabels') + '/{z}/{x}/{y}{r}.png';
+  }
+  function setTiles(){
+    if (!map) return;
+    if (tiles) map.removeLayer(tiles);
+    tiles = L.tileLayer(tileUrl(), { maxZoom: 10, minZoom: 3, subdomains: 'abcd',
+      attribution: 'Map: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>' });
+    var failed = 0;
+    tiles.on('tileerror', function(){ failed++; if (failed === 3) offline(); });
+    tiles.on('load', function(){ loading.classList.add('hide'); });
+    tiles.addTo(map);
+  }
+  function offline(){
+    loading.classList.remove('hide');
+    loading.innerHTML = '<div style="max-width:28ch;text-align:center;padding:16px">The map can\'t load right now (no internet). The episode recaps still work on the right.</div>';
+  }
+  if (mapOk) {
+    map = L.map('map', { zoomControl: true, attributionControl: true, zoomSnap: 0.5 });
+    map.fitBounds([[50.5, -9], [63.5, 24]]);
+    setTiles();
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', setTiles);
+    layer = L.layerGroup().addTo(map);
+    map.on('click', function(){ animToken++; }); // a tap skips the animation
+  } else { offline(); }
+
+  function latlng(id){ var p = PL[id]; return [p.lat, p.lon]; }
+  function labelIcon(text, cls){ return L.divIcon({ className: '', html: '<span class="lbl ' + (cls||'') + '">' + text + '</span>', iconAnchor: [-14, 14] }); }
+
+  function placesUpTo(n){ // ids in order of first appearance, episodes 1..n
+    var seen = [], last = n === 0 ? 9 : n;
+    EPS.slice(0, last).forEach(function(e){ e.places.forEach(function(p){ if (seen.indexOf(p.id) < 0) seen.push(p.id); }); });
+    return seen;
+  }
+  function journeysUpTo(n){ var last = n === 0 ? 9 : n, out = []; EPS.slice(0, last).forEach(function(e){ e.journeys.forEach(function(j){ out.push({ j: j, ep: e.n }); }); }); return out; }
+
+  function drawMap(){
+    if (!mapOk) return;
+    layer.clearLayers(); animToken++;
+    var n = state.ep, cur = n === 0 ? 9 : n;
+    var css = getComputedStyle(document.documentElement);
+    var pin = css.getPropertyValue('--pin').trim(), soft = css.getPropertyValue('--pin-soft').trim(), accent = css.getPropertyValue('--accent').trim();
+    journeysUpTo(n).forEach(function(x){
+      var isCur = n === 0 || x.ep === cur;
+      L.polyline([latlng(x.j.from), latlng(x.j.to)], { color: accent, weight: isCur ? 5 : 3, dashArray: isCur ? '10 10' : '4 10', opacity: isCur ? 1 : .8 }).addTo(layer);
+    });
+    placesUpTo(n).forEach(function(id){
+      var p = PL[id], ll = [p.lat, p.lon], inCur = EPS[cur - 1].places.some(function(q){ return q.id === id; });
+      var col = (n === 0 || inCur) ? pin : soft;
+      var m;
+      if (p.kind === 'pin') m = L.circleMarker(ll, { radius: 13, color: col, weight: 3, fillColor: col, fillOpacity: 1 });
+      else if (p.kind === 'area') m = L.circle(ll, { radius: p.radius_km * 1000, color: col, weight: 3, dashArray: '8 8', fillColor: col, fillOpacity: .12 });
+      else if (p.kind === 'coast') m = L.rectangle([[ll[0] - .18, ll[1] - .3], [ll[0] + .18, ll[1] + .3]], { color: col, weight: 3, fill: false });
+      else m = L.circleMarker(ll, { radius: 1, opacity: 0, fillOpacity: 0 });
+      m.addTo(layer).on('click', function(){ openPlace(id); });
+      L.marker(ll, { icon: labelIcon(p.name, p.kind === 'pin' ? '' : 'region'), interactive: true, keyboard: false }).addTo(layer).on('click', function(){ openPlace(id); });
+    });
+    animate();
+  }
+
+  function animate(){
+    if (!mapOk) return;
+    var n = state.ep, cur = n === 0 ? 9 : n;
+    var legs = (n === 0 ? journeysUpTo(0).map(function(x){ return x.j; }) : EPS[cur - 1].journeys);
+    if (shipMarker) { layer.removeLayer(shipMarker); shipMarker = null; }
+    if (!legs.length) return;
+    var token = ++animToken;
+    var icon = L.divIcon({ className: 'ship', iconSize: [30, 30], iconAnchor: [15, 15],
+      html: '<svg viewBox="0 0 30 30" aria-hidden="true"><path d="M3 17 L27 17 L22 25 L8 25 Z" fill="currentColor"/><path d="M15 4 L15 17" stroke="currentColor" stroke-width="2"/><path d="M15 5 L24 12 L15 12 Z" fill="currentColor"/></svg>' });
+    shipMarker = L.marker(latlng(legs[0].from), { icon: icon, interactive: false, keyboard: false }).addTo(layer);
+    shipMarker.getElement().style.color = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    if (reduced) { shipMarker.setLatLng(latlng(legs[legs.length - 1].to)); return; }
+    var per = Math.min(3000 / legs.length, 1500), i = 0;
+    function leg(){
+      if (token !== animToken || i >= legs.length) return;
+      var a = latlng(legs[i].from), b = latlng(legs[i].to), t0 = performance.now();
+      function step(now){
+        if (token !== animToken) return;
+        var t = Math.min(1, (now - t0) / per);
+        shipMarker.setLatLng([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+        if (t < 1) requestAnimationFrame(step); else { i++; leg(); }
+      }
+      requestAnimationFrame(step);
+    }
+    leg();
+  }
+  document.getElementById('replay').addEventListener('click', function(){ animate(); });
+
+  // ---------- Panel ----------
+  var body = document.getElementById('body'), title = document.getElementById('ep-title'), sub = document.getElementById('ep-sub');
+  document.getElementById('checked').textContent = D.source_note;
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function markClass(kind){ return kind === 'pin' ? '' : (kind === 'coast' ? 'coast' : 'region'); }
+
+  function render(){
+    var n = state.ep;
+    document.getElementById('prev').disabled = (n === 0);
+    document.getElementById('next').disabled = (n === 9);
+    if (n === 0) { title.textContent = 'Vikings, Season 1'; sub.textContent = 'All of Season 1'; }
+    else { title.textContent = 'Episode ' + n + ' of 9'; sub.textContent = EPS[n - 1].title; }
+    body.scrollTop = 0;
+    if (state.view === 'who') return renderWho();
+    if (state.view === 'place') return renderPlace();
+    var h = '';
+    if (n === 0) {
+      h += '<p>Tap › to start at episode 1, or tap an episode below. The map shows every place in Season 1.</p>';
+      EPS.forEach(function(e){ h += '<button class="row" type="button" data-ep="' + e.n + '"><span style="min-width:2.2ch;font-weight:700">' + e.n + '</span><span>' + esc(e.title) + '</span></button>'; });
+      h += '<h3>Places in Season 1</h3>';
+      placesUpTo(0).forEach(function(id){ h += placeRow(id); });
+    } else {
+      var e = EPS[n - 1];
+      h += '<p class="checked">First shown ' + esc(e.aired) + '</p>';
+      h += '<p>' + esc(e.recap) + '</p>';
+      h += '<h3>Places in this episode</h3>';
+      e.places.forEach(function(p){ h += placeRow(p.id); });
+    }
+    body.innerHTML = h;
+    body.querySelectorAll('[data-ep]').forEach(function(b){ b.addEventListener('click', function(){ go(+b.getAttribute('data-ep')); }); });
+    body.querySelectorAll('[data-place]').forEach(function(b){ b.addEventListener('click', function(){ openPlace(b.getAttribute('data-place')); }); });
+  }
+  function placeRow(id){ var p = PL[id]; return '<button class="row" type="button" data-place="' + id + '"><span class="mark ' + markClass(p.kind) + '"></span><span>' + esc(p.name) + '</span></button>'; }
+
+  function renderPlace(){
+    var id = state.place, p = PL[id], n = state.ep, cur = n === 0 ? 9 : n;
+    var h = '<button class="back" type="button" id="back">‹ Back to ' + (n === 0 ? 'Season 1' : 'episode ' + n) + '</button>';
+    h += '<h2>' + esc(p.name) + '</h2>';
+    if (p.label) h += '<div class="notice">' + esc(p.label) + '</div>';
+    h += '<h3>In the show</h3>';
+    var any = false;
+    EPS.slice(0, cur).forEach(function(e){ e.places.forEach(function(q){ if (q.id === id) { any = true; h += '<p><b>Episode ' + e.n + '.</b> ' + esc(q.in_show) + '</p>'; } }); });
+    if (!any) h += '<p>Nothing happens here up to this episode.</p>';
+    h += '<h3>In history</h3>';
+    h += p.history ? '<p>' + esc(p.history) + '</p>' : '<p>The checked guides say nothing more about this place, so neither does this map.</p>';
+    body.innerHTML = h;
+    document.getElementById('back').addEventListener('click', function(){ state.view = 'episode'; state.place = null; render(); });
+  }
+  function renderWho(){
+    var h = '<button class="back" type="button" id="back">‹ Back</button><h2>Who\'s who at the end of Season 1</h2>';
+    D.whos_who.forEach(function(c){ h += '<p><b>' + esc(c.name) + '.</b> ' + esc(c.line) + '</p>'; });
+    body.innerHTML = h;
+    document.getElementById('back').addEventListener('click', function(){ state.view = 'episode'; render(); });
+  }
+  function openPlace(id){
+    state.view = 'place'; state.place = id; render();
+    if (mapOk) { var p = PL[id]; map.flyTo([p.lat, p.lon], Math.max(map.getZoom(), p.kind === 'pin' ? 7 : 5), { animate: !reduced, duration: 1 }); }
+  }
+  function go(n){ state.ep = n; state.view = 'episode'; state.place = null; try{ localStorage.setItem('ep', n); }catch(e){} render(); drawMap(); if (mapOk) map.fitBounds([[50.5, -9], [63.5, 24]], { animate: !reduced }); }
+  document.getElementById('prev').addEventListener('click', function(){ if (state.ep > 0) go(state.ep - 1); });
+  document.getElementById('next').addEventListener('click', function(){ if (state.ep < 9) go(state.ep + 1); });
+  document.getElementById('who').addEventListener('click', function(){ state.view = 'who'; render(); });
+
+  var start = 0; try { start = +(localStorage.getItem('ep') || 0) || 0; } catch(e){}
+  go(start);
+})();
+</script>
+</body>
+</html>
