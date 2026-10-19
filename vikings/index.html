@@ -130,15 +130,15 @@
   var mapOk = !!window.L;
   var map, tiles, layer, shipMarker, animToken = 0;
   var loading = document.getElementById('loading');
+  // Esri's World Physical Map: label-free, no API key, max zoom 8. (CARTO's basemaps now need a key and serve a watermark without one, found live 2026-10-18.)
   function tileUrl(){
-    var dark = getComputedStyle(document.documentElement).getPropertyValue('--tiles').trim() === 'dark';
-    return 'https://{s}.basemaps.cartocdn.com/' + (dark ? 'dark_nolabels' : 'light_nolabels') + '/{z}/{x}/{y}{r}.png';
+    return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}';
   }
   function setTiles(){
     if (!map) return;
     if (tiles) map.removeLayer(tiles);
-    tiles = L.tileLayer(tileUrl(), { maxZoom: 10, minZoom: 3, subdomains: 'abcd',
-      attribution: 'Map: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>' });
+    tiles = L.tileLayer(tileUrl(), { maxZoom: 8, minZoom: 3,
+      attribution: 'Map tiles: Esri, US National Park Service' });
     var failed = 0;
     tiles.on('tileerror', function(){ failed++; if (failed === 3) offline(); });
     tiles.on('load', function(){ loading.classList.add('hide'); });
